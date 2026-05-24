@@ -137,22 +137,22 @@ static const float volScaleFactor = 20.0f;
 
 float decibelsToVolumeFaderPosition (float db) noexcept
 {
-    return (db > -100.0f) ? std::exp ((db - 6.0f) * (1.0f / volScaleFactor)) : 0.0f;
+    return (db > -100.0f) ? std::exp ((db - 24.0f) * (1.0f / volScaleFactor)) : 0.0f;
 }
 
 float volumeFaderPositionToDB (float pos) noexcept
 {
-    return (pos > 0.0f) ? (volScaleFactor * std::log (pos)) + 6.0f : -100.0f;
+    return (pos > 0.0f) ? (volScaleFactor * std::log (pos)) + 24.0f : -100.0f;
 }
 
 float volumeFaderPositionToGain (float pos) noexcept
 {
-    return (pos > 0.0f) ? std::pow (10.0f, ((volScaleFactor * logf (pos)) + 6.0f) * (1.0f / 20.0f)) : 0.0f;
+    return (pos > 0.0f) ? std::pow (10.0f, ((volScaleFactor * logf (pos)) + 24.0f) * (1.0f / 20.0f)) : 0.0f;
 }
 
 float gainToVolumeFaderPosition (float gain) noexcept
 {
-    return (gain > 0.0f) ? std::exp (((20.0f * std::log10 (gain)) - 6.0f) * (1.0f / volScaleFactor)) : 0.0f;
+    return (gain > 0.0f) ? std::exp (((20.0f * std::log10 (gain)) - 24.0f) * (1.0f / volScaleFactor)) : 0.0f;
 }
 
 juce::String gainToDbString (float gain, float infLevel, int decPlaces)
