@@ -235,14 +235,14 @@ private:
 
     void handleMessageSafely (const juce::XmlElement& m)
     {
-       #if JUCE_WINDOWS
+       #if JUCE_WINDOWS && defined (_MSC_VER)
         __try
         {
        #endif
 
             handleMessage (m);
 
-       #if JUCE_WINDOWS
+       #if JUCE_WINDOWS && defined (_MSC_VER)
         }
         __except (1)
         {
