@@ -248,7 +248,7 @@ juce::Point<int> PluginWindowState::choosePositionForPluginWindow()
                 return p->getBounds().getPosition() + juce::Point<int> (80, 80);
 
     return juce::Desktop::getInstance().getDisplays()
-            .getPrimaryDisplay()->userBounds.getRelativePoint (0.2f, 0.2f).roundToInt();
+            .getPrimaryDisplay()->userArea.getRelativePoint (0.2f, 0.2f);
 }
 
 }} // namespace tracktion { inline namespace engine
