@@ -53,6 +53,7 @@
  #if ! __clang__
   #pragma GCC diagnostic ignored "-Wunused-but-set-variable"
   #pragma GCC diagnostic ignored "-Wzero-as-null-pointer-constant"
+  #pragma GCC diagnostic ignored "-Wclass-memaccess"
  #endif
  #pragma GCC diagnostic ignored "-Wunused-variable"
  #pragma GCC diagnostic ignored "-Wunused-parameter"
@@ -72,8 +73,7 @@
 #include "timestretch/tracktion_TimeStretch.test.cpp"
 #include "timestretch/tracktion_ReadAheadTimeStretcher.cpp"
 
-namespace tracktion { inline namespace engine
-{
+namespace tracktion::inline engine {
     #include "3rd_party/soundtouch/source/SoundTouch/BPMDetect.cpp"
     #undef max
     #include "3rd_party/soundtouch/source/SoundTouch/PeakFinder.cpp"
@@ -94,7 +94,7 @@ namespace tracktion { inline namespace engine
     #include "3rd_party/soundtouch/source/SoundTouch/sse_optimized.cpp"
     #include "3rd_party/soundtouch/source/SoundTouch/TDStretch.cpp"
    #endif
-}} // namespace tracktion { inline namespace engine
+} // namespace tracktion::inline engine
 
 #ifdef JUCE_MSVC
  #pragma warning (pop)

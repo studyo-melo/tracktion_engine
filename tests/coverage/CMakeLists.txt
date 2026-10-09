@@ -20,9 +20,9 @@ if (MSVC)
     set (CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 
-# If we are compiling for macOS we want to target OS versions down to 10.13
+# If we are compiling for macOS we want to target OS versions down to 10.15
 if (APPLE)
-    set (CMAKE_OSX_DEPLOYMENT_TARGET "10.13" CACHE INTERNAL "")
+    set (CMAKE_OSX_DEPLOYMENT_TARGET "10.15" CACHE INTERNAL "")
 endif()
 
 
@@ -103,6 +103,8 @@ endif()
 
 if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
     target_compile_options(${TARGET_NAME} PRIVATE "-fno-aligned-allocation")
+    target_compile_definitions(${TARGET_NAME} PRIVATE
+        $<IF:$<CONFIG:Debug>,_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_DEBUG,_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST>)
 endif()
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "GNU")

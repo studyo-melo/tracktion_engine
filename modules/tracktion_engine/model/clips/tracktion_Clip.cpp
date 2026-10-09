@@ -8,8 +8,7 @@
     Tracktion Engine uses a GPL/commercial licence - see LICENCE.md for details.
 */
 
-namespace tracktion { inline namespace engine
-{
+namespace tracktion::inline engine {
 
 class ThreadSafeClipPosition
 {
@@ -128,7 +127,7 @@ void Clip::initialise()
         if (auto f = track->getParentFolderTrack())
             f->setDirtyClips();
 
-        track->setFrozen (false, Track::groupFreeze);
+        track->unfreeze (Track::groupFreeze);
     }
 
     cancelAnyPendingUpdates();
@@ -156,13 +155,17 @@ bool Clip::isClipState (const juce::Identifier& i)
 static Clip::Ptr createNewEditClip (const juce::ValueTree& v, EditItemID newClipID, ClipOwner& targetParent)
 {
     auto& edit = targetParent.getClipOwnerEdit();
-    ProjectItemID sourceItemID (v.getProperty (IDs::source).toString());
-    auto sourceItem = edit.engine.getProjectManager().getProjectItem (sourceItemID);
+    auto project = edit.getProjectItemRef().getProject();
+
+    auto sourceString = v.getProperty (IDs::source).toString();
+    auto sourceFile = ProjectItemRef (sourceString).resolve (edit.engine, project ? project->getDefaultDirectory()
+                                                                                  : edit.editFileRetriever().getParentDirectory());
+    auto sourceItem = edit.engine.getProjectManager().getProjectItem (sourceFile);
     juce::String warning;
 
     if (sourceItem != nullptr && sourceItem->getLength() > 0.0)
     {
-        if (auto snapshot = EditSnapshot::getEditSnapshot (edit.engine, sourceItemID))
+        if (auto snapshot = EditSnapshot::getEditSnapshot (edit.engine, sourceItem->getSourceFile()))
         {
             // check for recursion
             auto referencedEdits = snapshot->getNestedEditObjects();
@@ -177,9 +180,9 @@ static Clip::Ptr createNewEditClip (const juce::ValueTree& v, EditItemID newClip
         }
     }
 
-    // If sourceItemID is invalid it means we're creating an empty EditClip
-    if (warning.isEmpty() || ! sourceItemID.isValid())
-        return new EditClip (v, newClipID, targetParent, sourceItemID);
+    // If sourceString is empty it means we're creating an empty EditClip
+    if (warning.isEmpty() || sourceString.isEmpty())
+        return new EditClip (v, newClipID, targetParent, ProjectItemRef (sourceString));
 
     edit.engine.getUIBehaviour().showWarningAlert (TRANS("Can't Import Edit"), TRANS(warning));
     return {};
@@ -347,7 +350,7 @@ void Clip::changed()
     Selectable::changed();
 
     if (auto track = getTrack())
-        track->setFrozen (false, Track::groupFreeze);
+        track->unfreeze (Track::groupFreeze);
 
     if (! cloneInProgress && isLinked() && ! edit.isLoading())
         updateLinkedClipsCaller.triggerAsyncUpdate();
@@ -497,8 +500,16 @@ bool Clip::moveTo (ClipOwner& newParent)
     }
     else if (auto cs = dynamic_cast<ClipSlot*> (&newParent))
     {
+        const bool wasInLauncher = getClipSlot() != nullptr;
+
         Clip::Ptr refHolder (this);
         cs->setClip (this);
+
+        // Clips already in the launcher keep their own settings
+        if (! wasInLauncher)
+            prepareClipForLauncher (*this);
+
+        return true;
     }
 
     return false;
@@ -580,6 +591,16 @@ void Clip::valueTreePropertyChanged (juce::ValueTree& tree, const juce::Identifi
         {
             sourceFileReference.source.forceUpdateOfCachedValue();
             sourceMediaChanged();
+        }
+        else if (id == IDs::disabled)
+        {
+            // A disabled launcher clip has no playback node, so a launched or queued
+            // one would otherwise carry on part way through when it's enabled again
+            disabled.forceUpdateOfCachedValue();
+
+            if (disabled.get() && getClipSlot() != nullptr)
+                if (auto lh = getLaunchHandle())
+                    lh->stop ({});
         }
         else if (id == IDs::colour || id == IDs::speed
                  || id == IDs::sync || id == IDs::linkID)
@@ -671,8 +692,14 @@ std::pair<std::function<CurvePosition()>, std::function<ClipPositionInfo()>> Cli
         [position = clipPosition, handle = std::move (clipLauncherHandle)]
         {
             if (handle)
+            {
                 if (auto playedRange = handle->getPlayedRange())
                     return CurvePosition { playedRange->getStart() - position->getOffsetInBeats(), *playedRange };
+
+                // A launcher clip that isn't playing has no range in the Edit,
+                // so its curves mustn't apply to the track's other clips
+                return CurvePosition { position->getContentStartBeat(), BeatRange() };
+            }
 
             return CurvePosition { position->getContentStartBeat(), position->getEditBeatRange() };
         };
@@ -722,9 +749,9 @@ juce::Array<Exportable::ReferencedItem> Clip::getReferencedItems()
     return edit.engine.getEngineBehaviour().getReferencedItems (*this);
 }
 
-void Clip::reassignReferencedItem (const ReferencedItem& itm, ProjectItemID newID, double newStartTime)
+void Clip::reassignReferencedItem (const ReferencedItem& itm, ProjectItemRef newRef, double newStartTime)
 {
-    edit.engine.getEngineBehaviour().reassignReferencedItem (*this, itm, newID, newStartTime);
+    edit.engine.getEngineBehaviour().reassignReferencedItem (*this, itm, newRef, newStartTime);
 }
 
 ClipPosition Clip::getPosition() const
@@ -825,7 +852,7 @@ namespace details
     }
 }
 
-}} // namespace tracktion { inline namespace engine
+} // namespace tracktion::inline engine
 
 //==============================================================================
 //==============================================================================
@@ -866,6 +893,67 @@ TEST_SUITE("tracktion_engine")
         {
             clip->trimAwayOverlap ({ 10_tp, 12_tp });
             CHECK (clip->getPosition().time == positionBeforeTrim.time);
+        }
+    }
+
+    TEST_CASE("Fade length correction isn't undoable")
+    {
+        auto& engine = *tracktion::engine::Engine::getEngines()[0];
+        auto edit = Edit::createSingleTrackEdit (engine);
+        auto track = getAudioTracks (*edit)[0];
+        auto& undoManager = edit->getUndoManager();
+
+        auto clip = dynamic_cast<AudioClipBase*> (insertNewClip (*track, TrackItem::Type::wave, { 2_tp, 3_tp }));
+        REQUIRE (clip != nullptr);
+
+        // A comp remnant can be left with fades that are longer than the clip itself
+        const auto length = TimeDuration::fromSeconds (0.00999999999999979);
+        auto clipState = clip->state;
+        clipState.setProperty (IDs::length, length.inSeconds(), nullptr);
+        clipState.setProperty (IDs::fadeIn, 0.0, nullptr);
+        clipState.setProperty (IDs::fadeOut, 0.02, nullptr);
+
+        SUBCASE ("Correcting the fades during construction isn't undoable")
+        {
+            track->state.removeChild (clipState, nullptr);
+            undoManager.clearUndoHistory();
+            undoManager.beginNewTransaction();
+
+            track->state.addChild (clipState, -1, nullptr);
+            const double correctedFadeOut = clipState[IDs::fadeOut];
+            CHECK (correctedFadeOut == doctest::Approx (length.inSeconds()));
+
+            // Undoing back past the clip's construction mustn't revert the correction
+            while (undoManager.canUndo())
+                undoManager.undo();
+
+            CHECK (double (clipState[IDs::fadeOut]) == doctest::Approx (correctedFadeOut));
+        }
+
+        SUBCASE ("Fades are corrected when a clip is rebuilt during an undo")
+        {
+            undoManager.clearUndoHistory();
+            undoManager.beginNewTransaction();
+            clip->removeFromParent();
+            REQUIRE (track->getClips().isEmpty());
+
+            undoManager.beginNewTransaction();
+            undoManager.undo();
+
+            REQUIRE (track->getClips().size() == 1);
+            auto rebuiltClip = dynamic_cast<AudioClipBase*> (track->getClips()[0]);
+            REQUIRE (rebuiltClip != nullptr);
+            CHECK (rebuiltClip->getFadeIn() + rebuiltClip->getFadeOut() <= length);
+
+            // The correction has to reach the state, not just the CachedValue, or it's
+            // lost the next time the Edit is loaded
+            const double fadeInInState  = rebuiltClip->state[IDs::fadeIn];
+            const double fadeOutInState = rebuiltClip->state[IDs::fadeOut];
+            CHECK (fadeInInState + fadeOutInState <= length.inSeconds());
+            CHECK (fadeOutInState == doctest::Approx (length.inSeconds()));
+
+            // The undo history must still be intact
+            CHECK (undoManager.canRedo());
         }
     }
 }

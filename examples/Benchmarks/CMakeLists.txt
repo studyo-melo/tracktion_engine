@@ -16,9 +16,9 @@ if (MSVC)
     set (CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 
-# If we are compiling for macOS we want to target OS versions down to 10.13
+# If we are compiling for macOS we want to target OS versions down to 10.15
 if (APPLE)
-    set (CMAKE_OSX_DEPLOYMENT_TARGET "10.13" CACHE INTERNAL "")
+    set (CMAKE_OSX_DEPLOYMENT_TARGET "10.15" CACHE INTERNAL "")
 endif()
 
 # Adds all the module sources so they appear correctly in the IDE
@@ -32,7 +32,9 @@ else()
     MESSAGE(STATUS "Not building with VST2")
 endif()
 
-juce_add_console_app(${TARGET_NAME})
+juce_add_console_app(${TARGET_NAME}
+    NEEDS_CURL TRUE
+    NEEDS_WEB_BROWSER FALSE)
 
 juce_generate_juce_header(${TARGET_NAME})
 
@@ -61,11 +63,11 @@ target_compile_definitions(${TARGET_NAME} PRIVATE
     JUCE_PLUGINHOST_AU=1
     JUCE_PLUGINHOST_LADSPA=1
     JUCE_PLUGINHOST_VST3=1
-    JUCE_USE_CURL=1
     JUCE_LOAD_CURL_SYMBOLS_LAZILY=1
-    JUCE_WEB_BROWSER=0
     JUCE_STRICT_REFCOUNTEDPOINTER=1
     JUCE_MODAL_LOOPS_PERMITTED=1
+    JUCE_USE_CURL=1
+    JUCE_WEB_BROWSER=0
     TRACKTION_BENCHMARKS=1
     TRACKTION_LOG_DEVICES=0)
 
