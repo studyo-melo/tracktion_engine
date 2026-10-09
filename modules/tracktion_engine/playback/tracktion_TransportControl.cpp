@@ -1376,13 +1376,17 @@ void TransportControl::performPlay()
         if (transportState->justSendMMCIfEnabled && sendMMCStartPlay())
             return;
 
+        bool rollIn = false;
+
         if (looping)
         {
             const auto cursorPos = position.get();
             const auto loopRange = getLoopRange();
+            rollIn = rollInToLoopFromCursor && cursorPos < loopRange.getStart();
 
-            if (cursorPos < loopRange.getStart()
-                || cursorPos > loopRange.getEnd() - 0.1s)
+            if (! rollIn
+                && (cursorPos < loopRange.getStart()
+                    || cursorPos > loopRange.getEnd() - 0.1s))
             {
                 position = loopRange.getStart();
             }
@@ -1426,7 +1430,10 @@ void TransportControl::performPlay()
             // Post the position change to be dispatched otherwise what we're effectively doing is setting
             // the position for "this" block and it will get incremented the next block, actually starting
             // playback 1 block from the start
-            playHeadWrapper->setPosition (position);
+            if (rollIn)
+                playHeadWrapper->setRollInToLoop (position);
+            else
+                playHeadWrapper->setPosition (position);
         }
         else
         {
@@ -1475,7 +1482,8 @@ std::optional<std::pair<SyncPoint, std::optional<TimeRange>>> TransportControl::
             else
             {
                 const auto loopRange = getLoopRange();
-                transportState->startTime   = position.get();
+                const auto cursorPos = position.get();
+                transportState->startTime   = cursorPos;
                 transportState->endTime     = Edit::getMaximumEditEnd();
 
                 if (looping)
@@ -1516,6 +1524,12 @@ std::optional<std::pair<SyncPoint, std::optional<TimeRange>>> TransportControl::
                     // N.B. this +0.5 beats here specifies the behaviour further down when setting the click range.
                     // If this changes, that will also need to change.
                 }
+
+                // Roll in from the cursor, before or inside the loop, rather than
+                // jumping to the loop start; a count-in keeps the stock start.
+                if (looping && rollInToLoopFromCursor && numCountInBeats <= 0
+                    && cursorPos < loopRange.getEnd())
+                    prerollStart = cursorPos;
 
                 if (edit.getAbletonLink().isConnected())
                 {

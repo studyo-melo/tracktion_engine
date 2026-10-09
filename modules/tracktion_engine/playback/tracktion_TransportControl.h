@@ -395,6 +395,11 @@ public:
     /** @internal. */
     juce::CachedValue<bool> snapToTimecode, looping;
 
+    /** When looping, play or record starts at the cursor (before the loop it
+        rolls into it, as a DAW cycle does) instead of jumping to the loop
+        start. Off by default: stock behaviour unchanged. */
+    bool rollInToLoopFromCursor = false;
+
     //==============================================================================
     /** @internal */
     void callRecordingAboutToStartListeners (InputDeviceInstance&, EditItemID);
